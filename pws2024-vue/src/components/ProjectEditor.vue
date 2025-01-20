@@ -1,14 +1,18 @@
 <script>
-
     const projectEndpoint = '/api/project'
     const personEndpoint = '/api/person'
 
+    import TaskEditor from './TaskEditor.vue'
+
     export default {
+        components: { TaskEditor },
         data() {
             return {
                 personItems: [],
                 isValid: false,
                 input: {},
+                taskDialog: false,
+                selectedTask: null,
                 rules: {
                     startsWithLetter: value => {
                         const pattern = /^\p{L}/u
@@ -89,10 +93,50 @@
            },
            close() {
                 this.$emit('close')
-           }  
+           },
+           openTaskDialog(task = null) {
+                this.selectedTask = task
+                this.taskDialog = true
+           },
+           onTaskClose(message) {
+                this.taskDialog = false
+                if (message) {
+                    this.$emit('close', message)
+                }
+           },
+           onTaskUpdate(task) {
+                if (!this.input.tasks) {
+                    this.input.tasks = []
+                }
+                
+                if (task === null) {
+                    // Delete task
+                    const index = this.input.tasks.findIndex(t => t._id === this.selectedTask._id)
+                    if (index !== -1) {
+                        this.input.tasks.splice(index, 1)
+                    }
+                } else if (task._id) {
+                    // Update task
+                    const index = this.input.tasks.findIndex(t => t._id === task._id)
+                    if (index !== -1) {
+                        this.input.tasks.splice(index, 1, task)
+                    }
+                } else {
+                    // Add new task
+                    task._id = crypto.randomUUID()
+                    this.input.tasks.push(task)
+                }
+           },
+           getPersonName(workerId) {
+               const person = this.personItems.find(p => p._id === workerId)
+               return person ? `${person.firstName} ${person.lastName}` : 'Unknown'
+           }
         },
         mounted() {
             Object.assign(this.input, this.project)
+            if (!this.input.tasks) {
+                this.input.tasks = []
+            }
             fetch(personEndpoint + '?' + 
                     new URLSearchParams({ sort: 'lastName', order: 1 }).toString())
                 .then(res => res.json().then(facet => {
@@ -120,6 +164,51 @@
                     chips label="Contractors" multiple
                     :items="personItems" :item-title="item => item.firstName + ' ' + item.lastName" item-value="_id"
                 ></v-autocomplete>
+
+                <!-- Tasks Section -->
+                <v-divider class="my-4"></v-divider>
+                <div class="d-flex align-center mb-4">
+                    <h3 class="text-h6 mr-4">Tasks</h3>
+                    <v-btn color="primary" variant="outlined" @click="openTaskDialog()">Add Task</v-btn>
+                </div>
+                
+                <v-table v-if="input.tasks && input.tasks.length > 0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Completed</th>
+                            <th>Workers</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="task in input.tasks" :key="task._id">
+                            <td>{{ task.name }}</td>
+                            <td>{{ task.startDate }}</td>
+                            <td>{{ task.endDate || '-' }}</td>
+                            <td>
+                                <v-icon :color="task.endDate ? 'success' : 'grey'">
+                                    {{ task.endDate ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                                </v-icon>
+                            </td>
+                            <td>
+                                <v-chip-group>
+                                    <v-chip v-for="workerId in task.worker_ids" :key="workerId" size="small">
+                                        {{ getPersonName(workerId) }}
+                                    </v-chip>
+                                </v-chip-group>
+                            </td>
+                            <td>
+                                <v-btn icon="mdi-pencil" variant="text" density="compact" @click.stop="openTaskDialog(task)"></v-btn>
+                            </td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <v-alert v-else type="info" variant="tonal">
+                    No tasks added yet
+                </v-alert>
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
@@ -130,8 +219,18 @@
                 <v-btn variant="elevated" @click="close">Close</v-btn>
             </v-card-actions>
         </v-card>
-    </v-form>
 
+        <!-- Task Editor Dialog -->
+        <v-dialog v-model="taskDialog" width="500px">
+            <TaskEditor 
+                v-if="taskDialog"
+                :value="selectedTask"
+                :persons="personItems"
+                @update:modelValue="onTaskUpdate"
+                @close="onTaskClose"
+            />
+        </v-dialog>
+    </v-form>
 </template>
 
 <style scoped>
