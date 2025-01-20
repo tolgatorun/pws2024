@@ -1,5 +1,6 @@
 const uuid = require('uuid')
 const mongoose = require('mongoose')
+const websocket = require('./websocket')
 
 const project = module.exports = {
     model: null,
@@ -85,6 +86,12 @@ const project = module.exports = {
         }
         item.save()
             .then(row => {
+                // Broadcast project update
+                websocket.broadcast({
+                    type: 'project_update',
+                    action: 'create',
+                    projectId: row._id
+                })
                 res.json(row)
             })
             .catch(err => {
@@ -100,6 +107,12 @@ const project = module.exports = {
         delete req.body._id
         project.model.findOneAndUpdate({ _id }, { $set: req.body }, { new: true, runValidators: true })
             .then(row => {
+                // Broadcast project update
+                websocket.broadcast({
+                    type: 'project_update',
+                    action: 'update',
+                    projectId: _id
+                })
                 res.json(row)
             })
             .catch(err => {
@@ -114,6 +127,12 @@ const project = module.exports = {
         }
         project.model.findOneAndDelete({ _id })
             .then(row => {
+                // Broadcast project update
+                websocket.broadcast({
+                    type: 'project_update',
+                    action: 'delete',
+                    projectId: _id
+                })
                 res.json(row)
             })
             .catch(err => {

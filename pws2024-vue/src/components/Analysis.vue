@@ -123,7 +123,9 @@ export default {
             timelineStart: null,
             timelineEnd: null,
             taskTimelineStart: null,
-            taskTimelineEnd: null
+            taskTimelineEnd: null,
+            ws: null,
+            isDestroyed: false
         }
     },
     computed: {
@@ -283,6 +285,44 @@ export default {
                     + (remainingMonths ? ` ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}` : '')
             }
         },
+        initWebSocket() {
+            if (this.ws) {
+                this.ws.close()
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+            const wsUrl = `${protocol}//${window.location.host}/ws`
+            
+            this.ws = new WebSocket(wsUrl)
+            
+            this.ws.onopen = () => {
+                console.log('WebSocket connected')
+            }
+
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data)
+                    if (data.type === 'project_update') {
+                        console.log('Received project update:', data)
+                        this.fetchProjects()
+                    }
+                } catch (err) {
+                    console.error('WebSocket message parsing error:', err)
+                }
+            }
+
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error)
+            }
+
+            this.ws.onclose = (event) => {
+                console.log('WebSocket disconnected:', event.code, event.reason)
+                // Only try to reconnect if the component is still mounted
+                if (!this.isDestroyed) {
+                    setTimeout(() => this.initWebSocket(), 3000)
+                }
+            }
+        },
     },
     watch: {
         selectedProject() {
@@ -291,6 +331,13 @@ export default {
     },
     mounted() {
         this.fetchProjects()
+        this.initWebSocket()
+    },
+    beforeUnmount() {
+        this.isDestroyed = true
+        if (this.ws) {
+            this.ws.close()
+        }
     }
 }
 </script>
