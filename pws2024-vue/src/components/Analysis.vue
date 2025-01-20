@@ -15,13 +15,33 @@
                                 :class="{ 'ongoing': !project.endDate }"
                                 :style="getBarStyle(project.startDate, project.endDate || currentDate)"
                             >
-                                {{ project.name }}
+                                <v-tooltip location="top">
+                                    <template v-slot:activator="{ props }">
+                                        <div class="bar-content" v-bind="props">
+                                            {{ project.name }}
+                                            <span class="date-info">
+                                                {{ formatDateFull(project.startDate) }} - 
+                                                {{ project.endDate ? formatDateFull(project.endDate) : 'Ongoing' }}
+                                            </span>
+                                        </div>
+                                    </template>
+                                    <div class="tooltip-content">
+                                        <strong>{{ project.name }}</strong><br>
+                                        Start: {{ formatDateFull(project.startDate) }}<br>
+                                        {{ project.endDate ? 'End: ' + formatDateFull(project.endDate) : 'Status: Ongoing' }}<br>
+                                        Duration: {{ getDuration(project.startDate, project.endDate || currentDate) }}
+                                    </div>
+                                </v-tooltip>
                             </div>
                         </div>
                     </div>
                     <div class="gantt-timeline">
-                        <div v-for="date in timelineLabels" :key="date" class="timeline-label">
-                            {{ formatDate(date) }}
+                        <div v-for="date in timelineLabels" :key="date" class="timeline-marker">
+                            <div class="timeline-label">
+                                <div class="timeline-date">{{ formatTimelineDate(date).top }}</div>
+                                <div class="timeline-week">{{ formatTimelineDate(date).bottom }}</div>
+                            </div>
+                            <div class="timeline-line"></div>
                         </div>
                     </div>
                 </div>
@@ -55,13 +75,33 @@
                                 :class="{ 'ongoing': !task.endDate }"
                                 :style="getBarStyle(task.startDate, task.endDate || currentDate)"
                             >
-                                {{ task.name }}
+                                <v-tooltip location="top">
+                                    <template v-slot:activator="{ props }">
+                                        <div class="bar-content" v-bind="props">
+                                            {{ task.name }}
+                                            <span class="date-info">
+                                                {{ formatDateFull(task.startDate) }} - 
+                                                {{ task.endDate ? formatDateFull(task.endDate) : 'Ongoing' }}
+                                            </span>
+                                        </div>
+                                    </template>
+                                    <div class="tooltip-content">
+                                        <strong>{{ task.name }}</strong><br>
+                                        Start: {{ formatDateFull(task.startDate) }}<br>
+                                        {{ task.endDate ? 'End: ' + formatDateFull(task.endDate) : 'Status: Ongoing' }}<br>
+                                        Duration: {{ getDuration(task.startDate, task.endDate || currentDate) }}
+                                    </div>
+                                </v-tooltip>
                             </div>
                         </div>
                     </div>
                     <div class="gantt-timeline">
-                        <div v-for="date in taskTimelineLabels" :key="date" class="timeline-label">
-                            {{ formatDate(date) }}
+                        <div v-for="date in taskTimelineLabels" :key="date" class="timeline-marker">
+                            <div class="timeline-label">
+                                <div class="timeline-date">{{ formatTimelineDate(date).top }}</div>
+                                <div class="timeline-week">{{ formatTimelineDate(date).bottom }}</div>
+                            </div>
+                            <div class="timeline-line"></div>
                         </div>
                     </div>
                 </div>
@@ -160,12 +200,38 @@ export default {
             let current = new Date(start)
             const endDate = new Date(end)
             
+            // Calculate optimal interval based on duration
+            const totalDays = Math.ceil((endDate - current) / (1000 * 60 * 60 * 24))
+            let intervalDays = 7 // default to weekly
+            if (totalDays > 90) intervalDays = 30 // monthly for longer periods
+            if (totalDays > 365) intervalDays = 90 // quarterly for very long periods
+            
             while (current <= endDate) {
                 dates.push(current.toISOString().split('T')[0])
-                current.setDate(current.getDate() + 14) // Two-week intervals
+                current.setDate(current.getDate() + intervalDays)
+            }
+            
+            // Always include the end date
+            if (dates[dates.length - 1] !== endDate.toISOString().split('T')[0]) {
+                dates.push(endDate.toISOString().split('T')[0])
             }
             
             return dates
+        },
+        formatTimelineDate(date) {
+            const d = new Date(date)
+            const month = d.toLocaleString('en-US', { month: 'short' })
+            const year = d.getFullYear()
+            
+            // Get week number for the date
+            const startOfYear = new Date(year, 0, 1)
+            const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000))
+            const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+            
+            return {
+                top: `${month} ${year}`,
+                bottom: `Week ${weekNum}`
+            }
         },
         getBarStyle(startDate, endDate) {
             const timelineStart = new Date(this.timelineStart)
@@ -186,9 +252,37 @@ export default {
         formatDate(date) {
             return new Date(date).toLocaleDateString('en-US', {
                 month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            })
+        },
+        formatDateFull(date) {
+            return new Date(date).toLocaleDateString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'long',
                 day: 'numeric'
             })
-        }
+        },
+        getDuration(startDate, endDate) {
+            const start = new Date(startDate)
+            const end = new Date(endDate)
+            const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+            
+            if (days < 30) {
+                return `${days} day${days !== 1 ? 's' : ''}`
+            } else if (days < 365) {
+                const months = Math.floor(days / 30)
+                const remainingDays = days % 30
+                return `${months} month${months !== 1 ? 's' : ''}`
+                    + (remainingDays ? ` ${remainingDays} day${remainingDays !== 1 ? 's' : ''}` : '')
+            } else {
+                const years = Math.floor(days / 365)
+                const remainingMonths = Math.floor((days % 365) / 30)
+                return `${years} year${years !== 1 ? 's' : ''}`
+                    + (remainingMonths ? ` ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}` : '')
+            }
+        },
     },
     watch: {
         selectedProject() {
@@ -205,7 +299,8 @@ export default {
 .gantt-container {
     position: relative;
     margin: 20px 0;
-    padding-top: 30px;
+    padding-top: 40px;
+    overflow-x: auto;
 }
 
 .gantt-row {
@@ -216,10 +311,14 @@ export default {
 }
 
 .gantt-label {
-    width: 150px;
+    min-width: 150px;
     padding-right: 10px;
     text-align: right;
     font-weight: 500;
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 1;
 }
 
 .gantt-bar-container {
@@ -228,6 +327,7 @@ export default {
     height: 30px;
     background-color: #f5f5f5;
     border-radius: 4px;
+    min-width: 800px;
 }
 
 .gantt-bar {
@@ -243,10 +343,29 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: all 0.3s ease;
+}
+
+.gantt-bar:hover {
+    height: 110%;
+    z-index: 2;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .gantt-bar.ongoing {
     background-color: #FFA726;
+}
+
+.bar-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.date-info {
+    font-size: 0.75rem;
+    opacity: 0.9;
 }
 
 .gantt-timeline {
@@ -257,13 +376,51 @@ export default {
     display: flex;
     justify-content: space-between;
     padding: 0 10px;
+    min-width: 800px;
+    height: 50px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.timeline-marker {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .timeline-label {
+    text-align: center;
+    padding: 4px 8px;
+    background: white;
+    border-radius: 4px;
     font-size: 0.75rem;
-    color: rgba(0, 0, 0, 0.6);
-    transform: rotate(-45deg);
-    transform-origin: left;
+    color: rgba(0, 0, 0, 0.7);
     white-space: nowrap;
+    z-index: 1;
+}
+
+.timeline-date {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.timeline-week {
+    font-size: 0.7rem;
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.timeline-line {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    bottom: -1000px;
+    width: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    pointer-events: none;
+}
+
+.tooltip-content {
+    text-align: left;
+    line-height: 1.5;
 }
 </style>
